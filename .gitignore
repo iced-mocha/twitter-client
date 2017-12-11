@@ -1,0 +1,12 @@
+vendor
+Gopkg.lock
+.DS_STORE
+*.swp
+SECRET.txt
+twitter-client
+workspace.env
+config.yml
+config.prod.yml
+server.key
+server.crt
+creds.txt

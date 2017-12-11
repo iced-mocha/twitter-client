@@ -1,0 +1,5 @@
+frontend-url: "https://www.iced-mocha.com:443"
+core-url: "https://www.iced-mocha.com:3000"
+callback-url: "https://www.iced-mocha.com:3002/v1/authorize_callback"
+twitter-token: "jBHWXSH4B8ziArhzKFemkbvn4"
+twitter-secret: "PUT SECRET HERE"
