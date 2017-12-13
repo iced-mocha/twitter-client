@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/garyburd/go-oauth/oauth"
@@ -49,6 +50,7 @@ type tweet struct {
 	Text       string      `json:"text"`
 	Timestamp  string      `json:"created_at"`
 	ID         string      `json:"id_str"`
+	IDNum      int64       `json:"id"`
 	User       twitterUser `json:"user"`
 }
 
@@ -82,13 +84,40 @@ func New(conf *config.Config) (*CoreHandler, error) {
 }
 
 type AuthRequest struct {
-	MochaUsername string `json:"username"`
-	Token         string `json:"token"`
-	Secret        string `json:"secret"`
+	Token  string `json:"token"`
+	Secret string `json:"secret"`
+}
+
+func (api *CoreHandler) GetIdentity(token, secret string) (*twitterUser, error) {
+	creds := &oauth.Credentials{Token: token, Secret: secret}
+	resp, err := oauthClient.Get(nil, creds, "https://api.twitter.com/1.1/account/verify_credentials.json", nil)
+	if err != nil {
+		log.Printf("Unable to complete request to twitter in GetIdentity: %v", err)
+		return nil, fmt.Errorf("error completing request")
+	}
+	defer resp.Body.Close()
+
+	contents, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Unable to read response body from twitter in GetIdentity: %v", err)
+		return nil, fmt.Errorf("error reading response body from twitter")
+	}
+
+	user := &twitterUser{}
+	if err = json.Unmarshal(contents, user); err != nil {
+		log.Printf("Unable to unmarshal body from twitter in GetIdentity: %v", err)
+		return nil, fmt.Errorf("error unmarshaling response body from twitter")
+	}
+
+	return user, nil
 }
 
 func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
-	// Marhsal our request body into go struct
+	username := mux.Vars(r)["userID"]
+	log.Printf("Received request to GetPosts for user %v", username)
+	pageToken := r.FormValue("continue")
+	log.Printf("Received pagetoken %v in GetPosts", pageToken)
+
 	contents, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		log.Printf("Unable to read request body in GetPosts: %v", err)
@@ -103,20 +132,26 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO First check our cache for posts for this particular user
-	// This is to avoid being ratelimited
-	if posts, exists := api.cache.Get("authRequest.MochaUsername"); exists {
-		// We expect our posts to be stored as byte array
-		if contents, ok := posts.([]byte); ok {
+	pageMap := make(map[string][]byte)
+	// Check our cache to avoid being ratelimited
+	if pageMapI, exists := api.cache.Get(username); exists {
+		// TODO fix this
+		pageMap, _ = pageMapI.(map[string][]byte)
+
+		if contents, exists := pageMap[pageToken]; exists {
+			// We expect our posts to be stored as byte array
 			w.Write(contents)
 			return
 		}
-		// Otherwise our value in the cache is corrupt
+	}
+
+	form := make(url.Values)
+	if pageToken != "" {
+		form["max_id"] = []string{"pageToken"}
 	}
 
 	creds := &oauth.Credentials{Token: authRequest.Token, Secret: authRequest.Secret}
-
-	resp, err := oauthClient.Get(nil, creds, "https://api.twitter.com/1.1/statuses/home_timeline.json", nil)
+	resp, err := oauthClient.Get(nil, creds, "https://api.twitter.com/1.1/statuses/home_timeline.json", form)
 	if err != nil {
 		log.Printf("Unable to complete request to twitter in GetPosts: %v", err)
 		http.Error(w, "error completing request", http.StatusInternalServerError)
@@ -141,10 +176,18 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	posts := []models.Post{}
+	var maxID int64
+	maxID = 1<<63 - 1
+
 	for _, tweet := range twitterPosts {
 		t, err := time.Parse(time.RubyDate, tweet.Timestamp)
 		if err != nil {
 			log.Printf("Unable to parse timestamp for tweet: %v - %v", tweet.ID, err)
+		}
+
+		// For pagination
+		if tweet.IDNum < maxID {
+			maxID = tweet.IDNum
 		}
 
 		generic := models.Post{
@@ -163,7 +206,14 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		posts = append(posts, generic)
 	}
 
-	contents, err = json.Marshal(posts)
+	nextURI := fmt.Sprintf("/v1/%v/posts?continue=%v", username, maxID-1)
+	log.Printf("Constructed next URI: %v", nextURI)
+	clientResp := models.ClientResp{
+		Posts:   posts,
+		NextURL: nextURI,
+	}
+
+	contents, err = json.Marshal(clientResp)
 	if err != nil {
 		log.Printf("Unable to marshal posts into json: %v", err)
 		http.Error(w, "error marshaling posts into json", http.StatusInternalServerError)
@@ -171,15 +221,16 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update our value into the cache
-	api.cache.Set(authRequest.MochaUsername, contents, gocache.DefaultExpiration)
+	pageMap[pageToken] = contents
+	api.cache.Set(username, pageMap, gocache.DefaultExpiration)
 	w.Write(contents)
 }
 
 func (api *CoreHandler) AuthorizeCallback(w http.ResponseWriter, r *http.Request) {
 	log.Println("Reaceived callback from Reddit oauth")
-	s := session.Get(r)
-	tempCred, _ := s[tempCredKey].(*oauth.Credentials)
-	if tempCred == nil || tempCred.Token != r.FormValue("oauth_token") {
+	s := session.Get(r.FormValue("oauth_token"))
+	tempCred, ok := s[tempCredKey].(*oauth.Credentials)
+	if tempCred == nil || !ok {
 		http.Error(w, "Unknown oauth_token.", 500)
 		return
 	}
@@ -197,17 +248,23 @@ func (api *CoreHandler) AuthorizeCallback(w http.ResponseWriter, r *http.Request
 	}
 	delete(s, tempCredKey)
 
-	go api.PostTwitterSecrets(authToken.Token, authToken.Secret, username)
+	user, err := api.GetIdentity(authToken.Token, authToken.Secret)
+	if err != nil {
+		http.Error(w, "Unable to get identity for user "+err.Error(), 500)
+		return
+	}
+
+	go api.PostTwitterSecrets(authToken.Token, authToken.Secret, username, user.Handle)
 
 	http.Redirect(w, r, api.conf.FrontendURL, 302)
 }
 
-func (api *CoreHandler) PostTwitterSecrets(token, secret, userID string) {
+func (api *CoreHandler) PostTwitterSecrets(token, secret, userID, twitterUsername string) {
 	// Post the bearer token to be saved in core
 	log.Printf("Preparing to store twitter account in core for user: %v", userID)
 	// TODO: Get twitter handler redditUsername, err := api.GetIdentity(bearerToken)
 
-	jsonStr := []byte(fmt.Sprintf(`{ "type": "twitter", "username": "%v", "token": "%v", "secret": "%v"}`, "", token, secret))
+	jsonStr := []byte(fmt.Sprintf(`{ "type": "twitter", "username": "%v", "token": "%v", "secret": "%v"}`, twitterUsername, token, secret))
 	req, err := http.NewRequest(http.MethodPost, api.conf.CoreURL+"/v1/users/"+userID+"/authorize/twitter", bytes.NewBuffer(jsonStr))
 	if err != nil {
 		log.Printf("Unable to post bearer token for user: %v - %v", userID, err)
@@ -238,13 +295,11 @@ func (api *CoreHandler) Authorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s := session.Get(r)
+	s := session.Get(tempCred.Token)
 	s[tempCredKey] = tempCred
 	s[usernameKey] = username
-	if err := session.Save(w, r, s); err != nil {
-		http.Error(w, "Error saving session , "+err.Error(), 500)
-		return
-	}
+	session.Save(tempCred.Token, s)
 
+	fmt.Printf("Temp creds: %v", tempCred)
 	http.Redirect(w, r, oauthClient.AuthorizationURL(tempCred, nil), 302)
 }

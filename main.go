@@ -8,6 +8,7 @@ import (
 
 	"github.com/iced-mocha/twitter-client/config"
 	"github.com/iced-mocha/twitter-client/handlers"
+	_ "github.com/iced-mocha/twitter-client/logging"
 	"github.com/iced-mocha/twitter-client/server"
 )
 

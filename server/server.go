@@ -16,7 +16,7 @@ func New(api handlers.CoreAPI) (*Server, error) {
 
 	s.Router.HandleFunc("/v1/{userID}/authorize", api.Authorize).Methods(http.MethodGet)
 	s.Router.HandleFunc("/v1/authorize_callback", api.AuthorizeCallback).Methods(http.MethodGet)
-	s.Router.HandleFunc("/v1/posts", api.GetPosts).Methods(http.MethodGet)
+	s.Router.HandleFunc("/v1/{userID}/posts", api.GetPosts).Methods(http.MethodGet)
 
 	return s, nil
 }
