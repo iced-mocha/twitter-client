@@ -44,14 +44,20 @@ type twitterUser struct {
 	ProfileImageURL string `json:"profile_image_url_https"`
 }
 
+type retweetStatus struct {
+	Text string      `json:"full_text"`
+	User twitterUser `json:"user"`
+}
+
 type tweet struct {
-	Retweets   int         `json:"retweet_count"`
-	Favourites int         `json:"favorite_count"`
-	Text       string      `json:"text"`
-	Timestamp  string      `json:"created_at"`
-	ID         string      `json:"id_str"`
-	IDNum      int64       `json:"id"`
-	User       twitterUser `json:"user"`
+	Retweets      int           `json:"retweet_count"`
+	Favourites    int           `json:"favorite_count"`
+	Text          string        `json:"full_text"`
+	Timestamp     string        `json:"created_at"`
+	ID            string        `json:"id_str"`
+	IDNum         int64         `json:"id"`
+	User          twitterUser   `json:"user"`
+	RetweetStatus retweetStatus `json:"retweeted_status"`
 }
 
 func New(conf *config.Config) (*CoreHandler, error) {
@@ -147,7 +153,8 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	form := make(url.Values)
-	form["count"] = []string{"100"}
+	form["count"] = []string{"20"}
+	form["tweet_mode"] = []string{"extended"}
 	if pageToken != "" {
 		form["max_id"] = []string{pageToken}
 	}
@@ -193,6 +200,14 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			maxID = tweet.IDNum
 		}
 
+		text := tweet.Text
+		imgURL := tweet.User.ProfileImageURL
+		// Kind of hack to avoid making models struct too specific
+		if tweet.RetweetStatus.Text != "" {
+			text = "RT @" + tweet.RetweetStatus.User.Handle + ": " + tweet.RetweetStatus.Text
+			imgURL = tweet.RetweetStatus.User.ProfileImageURL
+		}
+
 		generic := models.Post{
 			ID:          tweet.ID,
 			Date:        t,
@@ -202,8 +217,8 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			Platform:    "twitter",
 			Score:       tweet.Favourites,
 			Retweets:    tweet.Retweets,
-			Content:     tweet.Text,
-			ProfileImg:  tweet.User.ProfileImageURL,
+			Title:       text,
+			ProfileImg:  imgURL,
 		}
 
 		posts = append(posts, generic)
