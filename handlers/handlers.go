@@ -140,14 +140,16 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 
 		if contents, exists := pageMap[pageToken]; exists {
 			// We expect our posts to be stored as byte array
+			log.Printf("Found requested page %v in cache", pageToken)
 			w.Write(contents)
 			return
 		}
 	}
 
 	form := make(url.Values)
+	form["count"] = []string{"100"}
 	if pageToken != "" {
-		form["max_id"] = []string{"pageToken"}
+		form["max_id"] = []string{pageToken}
 	}
 
 	creds := &oauth.Credentials{Token: authRequest.Token, Secret: authRequest.Secret}
@@ -174,6 +176,7 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error unmarshaling response body from twitter", http.StatusInternalServerError)
 		return
 	}
+	log.Printf("Receieved %v posts from Twitter", len(twitterPosts))
 
 	posts := []models.Post{}
 	var maxID int64
