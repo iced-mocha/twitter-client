@@ -12,8 +12,8 @@ type Hashtag struct {
 }
 
 type MediaSize struct {
-	Width  string `json:"w"`
-	Height string `json:"h"`
+	Width  int `json:"w"`
+	Height int `json:"h"`
 }
 
 type Media struct {
@@ -69,7 +69,7 @@ func ParseMeta(contents []byte) map[string]string {
 	metas := []TweetMeta{}
 	err := json.Unmarshal(contents, &metas)
 	if err != nil {
-		log.Printf("Unable to parse tweet meta: %v")
+		log.Printf("Unable to parse tweet meta: %v", err)
 		return nil
 	}
 
