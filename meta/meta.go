@@ -19,7 +19,9 @@ type MediaSize struct {
 type Media struct {
 	Type       string               `json:"type"`
 	MediaURL   string               `json:"media_url_https"`
+	URL        string               `json:"url"`
 	MediaSizes map[string]MediaSize `json:"sizes"`
+	VideoInfo  interface{}          `json:"video_info"`
 }
 
 type Mention struct {
@@ -41,7 +43,7 @@ type Entity struct {
 }
 
 type TweetMeta struct {
-	Entities Entity `json:"entities"`
+	Entities Entity `json:"extended_entities"`
 	ID       string `json:"id_str"`
 }
 
