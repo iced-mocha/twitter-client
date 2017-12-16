@@ -215,8 +215,9 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			DisplayName: tweet.User.Name,
 			URL:         "https://twitter.com/" + tweet.User.Handle + "/status/" + tweet.ID,
 			Platform:    "twitter",
-			Score:       tweet.Favourites,
+			Score:       tweet.Favourites + tweet.Retweets,
 			Retweets:    tweet.Retweets,
+			Favourites:  tweet.Favourites,
 			Title:       text,
 			ProfileImg:  imgURL,
 		}
