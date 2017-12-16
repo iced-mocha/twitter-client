@@ -17,6 +17,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/iced-mocha/shared/models"
 	"github.com/iced-mocha/twitter-client/config"
+	"github.com/iced-mocha/twitter-client/meta"
 	"github.com/iced-mocha/twitter-client/session"
 	gocache "github.com/patrickmn/go-cache"
 )
@@ -45,8 +46,9 @@ type twitterUser struct {
 }
 
 type retweetStatus struct {
-	Text string      `json:"full_text"`
-	User twitterUser `json:"user"`
+	Text       string      `json:"full_text"`
+	User       twitterUser `json:"user"`
+	Favourites int         `json:"favorite_count"`
 }
 
 type tweet struct {
@@ -152,6 +154,7 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Add values for twitter api
 	form := make(url.Values)
 	form["count"] = []string{"20"}
 	form["tweet_mode"] = []string{"extended"}
@@ -175,6 +178,10 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// We also need to marshal our contents to get the additional twitter meta data
+	// Metatext will be a map of tweet id -> json string of tweet meta
+	metaMap := meta.ParseMeta(contents)
+
 	// First Marshal response in list of Twitter Posts
 	twitterPosts := make([]tweet, 0)
 	err = json.Unmarshal(contents, &twitterPosts)
@@ -183,7 +190,6 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "error unmarshaling response body from twitter", http.StatusInternalServerError)
 		return
 	}
-	log.Printf("Receieved %v posts from Twitter", len(twitterPosts))
 
 	posts := []models.Post{}
 	var maxID int64
@@ -208,6 +214,11 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			imgURL = tweet.RetweetStatus.User.ProfileImageURL
 		}
 
+		favourites := tweet.Favourites
+		if tweet.RetweetStatus.Favourites > favourites {
+			favourites = tweet.RetweetStatus.Favourites
+		}
+
 		generic := models.Post{
 			ID:          tweet.ID,
 			Date:        t,
@@ -215,13 +226,15 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			DisplayName: tweet.User.Name,
 			URL:         "https://twitter.com/" + tweet.User.Handle + "/status/" + tweet.ID,
 			Platform:    "twitter",
-			Score:       tweet.Favourites + tweet.Retweets,
+			Score:       favourites + tweet.Retweets,
 			Retweets:    tweet.Retweets,
-			Favourites:  tweet.Favourites,
+			Favourites:  favourites,
 			Title:       text,
 			ProfileImg:  imgURL,
+			Meta:        metaMap[tweet.ID],
 		}
-
+		//fmt.Printf("from tweet score: %v retweets: %v favourites: %v\n", tweet.Retweets+tweet.Favourites, tweet.Retweets, tweet.Favourites)
+		//fmt.Printf("score: %v retweets: %v favourites: %v\n", generic.Score, generic.Retweets, generic.Favourites)
 		posts = append(posts, generic)
 	}
 
