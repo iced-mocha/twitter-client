@@ -233,8 +233,6 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 			ProfileImg:  imgURL,
 			Meta:        metaMap[tweet.ID],
 		}
-		//fmt.Printf("from tweet score: %v retweets: %v favourites: %v\n", tweet.Retweets+tweet.Favourites, tweet.Retweets, tweet.Favourites)
-		//fmt.Printf("score: %v retweets: %v favourites: %v\n", generic.Score, generic.Retweets, generic.Favourites)
 		posts = append(posts, generic)
 	}
 

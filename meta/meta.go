@@ -35,7 +35,7 @@ type URL struct {
 
 type Entity struct {
 	Hashtags []Hashtag `json:"hashtags"`
-	Medias   []Media   `json:"Medias"`
+	Medias   []Media   `json:"media"`
 	Mentions []Mention `json:"user_mentions"`
 	URLs     []URL     `json:"urls"`
 }
