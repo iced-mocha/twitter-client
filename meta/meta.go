@@ -31,8 +31,9 @@ type Mention struct {
 }
 
 type URL struct {
-	URL        string `json:"expanded_url"`
+	Link       string `json:"expanded_url"`
 	DisplayURL string `json:"display_url"`
+	URL        string `json:"url"`
 }
 
 type Entity struct {
@@ -43,7 +44,8 @@ type Entity struct {
 }
 
 type TweetMeta struct {
-	Entities Entity `json:"extended_entities"`
+	Extended Entity `json:"extended_entities"`
+	Entities Entity `json:"entities"`
 	ID       string `json:"id_str"`
 }
 
