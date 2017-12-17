@@ -257,7 +257,7 @@ func (api *CoreHandler) GetPosts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *CoreHandler) AuthorizeCallback(w http.ResponseWriter, r *http.Request) {
-	log.Println("Reaceived callback from Reddit oauth")
+	log.Println("Reaceived callback from Twitter oauth")
 	s := session.Get(r.FormValue("oauth_token"))
 	tempCred, ok := s[tempCredKey].(*oauth.Credentials)
 	if tempCred == nil || !ok {

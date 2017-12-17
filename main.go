@@ -47,5 +47,5 @@ func main() {
 		Handler:   s.Router,
 		TLSConfig: &tls.Config{},
 	}
-	log.Fatal(srv.ListenAndServeTLS("/usr/local/etc/ssl/certs/reddit.crt", "/usr/local/etc/ssl/private/reddit.key"))
+	log.Fatal(srv.ListenAndServeTLS("/usr/local/etc/ssl/certs/twitter.crt", "/usr/local/etc/ssl/private/twitter.key"))
 }
